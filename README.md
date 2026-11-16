@@ -1,0 +1,67 @@
+# Mindustry GitHub Save Sync
+
+A Mindustry v8 Java mod that synchronizes Mindustry's complete game-data export between desktop and Android through a GitHub repository.
+
+## Safety behavior
+
+- Uses Mindustry's own full-data export/import implementation.
+- Keeps GitHub credentials in `github-save-sync/config.json`, outside the exported archive.
+- Creates a dated local backup before every download/import.
+- Detects remote changes since the device's last sync and asks before overwriting them.
+- Requires explicit confirmation before replacing local data.
+- Exits after import so Mindustry reloads the replaced settings and saves cleanly.
+- Refuses uploads larger than GitHub's 100 MiB Contents API limit.
+
+The full Mindustry export includes settings, saves, campaign sectors, schematics, custom maps, installed mods, and save-related cached assets.
+
+## Install
+
+1. Download the cross-platform `mindustry-github-sync.jar` from this project's GitHub Actions artifact, or build it locally.
+2. In Mindustry, open **Mods → Import Mod → Import File** and select the JAR.
+3. Restart Mindustry if prompted.
+4. Select **GitHub Save Sync** on the main menu, then **Connection settings**.
+
+Install the same mod JAR on both devices before downloading data on either one.
+
+## GitHub setup
+
+1. Create a private GitHub repository. It can be empty.
+2. In GitHub, create a fine-grained personal access token restricted to that repository.
+3. Grant only **Repository permissions → Contents → Read and write**.
+4. Enter the repository owner, repository name, branch, remote path, and token in the mod's settings dialog.
+
+Use the repository name only (for example `mindustry-save`), not its full URL. The default remote path is `mindustry-data.zip`.
+
+## Recommended workflow
+
+1. When finished on device A, return to Mindustry's main menu and press **Upload game data**.
+2. On device B, press **Download game data**, confirm the replacement, and reopen Mindustry.
+3. Play on device B, return to the main menu, and upload before switching back.
+
+Do not play independently on both devices without uploading/downloading between sessions. This is whole-archive synchronization, not a merge system.
+
+## Build
+
+Desktop-only development JAR:
+
+```shell
+./gradlew jar
+```
+
+Cross-platform Android + desktop JAR (requires Android SDK and `d8` on `PATH`):
+
+```shell
+./gradlew deploy
+```
+
+The cross-platform output is `build/libs/mindustry-github-sync.jar`. The included GitHub Actions workflow builds it automatically without storing your save repository token in the project.
+
+## Restore a local backup
+
+Backups are stored under Mindustry's data directory at:
+
+```text
+github-save-sync/backups/
+```
+
+Restore one through **Settings → Game Data → Import Data**.

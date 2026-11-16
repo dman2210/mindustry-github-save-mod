@@ -1,0 +1,8 @@
+displayName: "GitHub Save Sync"
+name: "github-save-sync"
+author: "Dylan Brown"
+main: "githubsync.GitHubSyncMod"
+description: "Synchronize complete Mindustry game data between devices through a private GitHub repository."
+version: 1.0.0
+minGameVersion: 160.3
+java: true

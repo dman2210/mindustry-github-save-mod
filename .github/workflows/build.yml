@@ -1,0 +1,26 @@
+name: Build cross-platform mod
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Add Android build tools to PATH
+        run: echo "${ANDROID_HOME}/build-tools/34.0.0" >> "$GITHUB_PATH"
+      - name: Build Android and desktop JAR
+        run: |
+          chmod +x gradlew
+          ./gradlew deploy
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mindustry-github-sync
+          path: build/libs/mindustry-github-sync.jar
