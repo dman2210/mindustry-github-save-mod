@@ -4,6 +4,7 @@ import arc.util.Http;
 import arc.util.Http.HttpMethod;
 import arc.util.Http.HttpStatusException;
 import arc.util.serialization.Jval;
+import arc.struct.Seq;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -23,6 +24,22 @@ final class GitHubClient{
         }
     }
 
+    static final class Revision{
+        final String commitSha;
+        final String date;
+        final String message;
+
+        Revision(String commitSha, String date, String message){
+            this.commitSha = commitSha;
+            this.date = date;
+            this.message = message;
+        }
+
+        String shortSha(){
+            return commitSha.length() > 7 ? commitSha.substring(0, 7) : commitSha;
+        }
+    }
+
     private final SyncConfig config;
 
     GitHubClient(SyncConfig config){
@@ -30,13 +47,35 @@ final class GitHubClient{
     }
 
     void metadata(Success<RemoteFile> success, Failure failure){
-        request(HttpMethod.GET, apiUrl() + "?ref=" + encode(config.branch), null, "application/vnd.github+json", response -> {
+        metadata(config.branch, success, failure);
+    }
+
+    void metadata(String ref, Success<RemoteFile> success, Failure failure){
+        request(HttpMethod.GET, apiUrl() + "?ref=" + encode(ref), null, "application/vnd.github+json", response -> {
             Jval json = Jval.read(response);
             success.accept(new RemoteFile(true, json.getString("sha")));
         }, (status, message) -> {
             if(status == 404) success.accept(new RemoteFile(false, ""));
             else failure.accept(message);
         });
+    }
+
+    void revisions(Success<Seq<Revision>> success, Failure failure){
+        String url = repositoryApiUrl() + "/commits?path=" + encode(config.path.replace('\\', '/')) +
+            "&sha=" + encode(config.branch) + "&per_page=30";
+        request(HttpMethod.GET, url, null, "application/vnd.github+json", response -> {
+            Seq<Revision> revisions = new Seq<>();
+            for(Jval entry : Jval.read(response).asArray()){
+                Jval commit = entry.get("commit");
+                Jval author = commit.get("author");
+                revisions.add(new Revision(
+                    entry.getString("sha"),
+                    author == null ? "Unknown date" : author.getString("date", "Unknown date"),
+                    commit.getString("message", "Mindustry save sync")
+                ));
+            }
+            success.accept(revisions);
+        }, (status, message) -> failure.accept(message));
     }
 
     void upload(byte[] bytes, RemoteFile remote, Success<String> success, Failure failure){
@@ -50,7 +89,11 @@ final class GitHubClient{
     }
 
     void download(Success<byte[]> success, Failure failure){
-        requestBytes(apiUrl() + "?ref=" + encode(config.branch), "application/vnd.github.raw+json", success, failure);
+        download(config.branch, success, failure);
+    }
+
+    void download(String ref, Success<byte[]> success, Failure failure){
+        requestBytes(apiUrl() + "?ref=" + encode(ref), "application/vnd.github.raw+json", success, failure);
     }
 
     private String apiUrl(){
@@ -61,7 +104,11 @@ final class GitHubClient{
             if(path.length() > 0) path.append('/');
             path.append(encode(segment));
         }
-        return "https://api.github.com/repos/" + encode(config.owner) + "/" + encode(config.repository) + "/contents/" + path;
+        return repositoryApiUrl() + "/contents/" + path;
+    }
+
+    private String repositoryApiUrl(){
+        return "https://api.github.com/repos/" + encode(config.owner) + "/" + encode(config.repository);
     }
 
     private void request(HttpMethod method, String url, String body, String accept, Success<String> success, HttpFailure failure){

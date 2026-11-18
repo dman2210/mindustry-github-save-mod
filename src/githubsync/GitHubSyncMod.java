@@ -4,6 +4,7 @@ import arc.Core;
 import arc.Events;
 import arc.files.Fi;
 import arc.scene.ui.TextField;
+import arc.struct.Seq;
 import arc.util.Log;
 import arc.util.Time;
 import mindustry.Vars;
@@ -115,7 +116,7 @@ public class GitHubSyncMod extends Mod{
         Fi export = workDirectory.child("upload.zip");
         try{
             workDirectory.mkdirs();
-            Vars.ui.settings.exportData(export);
+            GameDataArchive.exportData(export);
             long length = export.length();
             if(length > githubLimit){
                 export.delete();
@@ -147,20 +148,53 @@ public class GitHubSyncMod extends Mod{
 
     private void download(){
         if(!ready() || !start()) return;
-        Vars.ui.showInfoToast("Checking GitHub…", 3f);
+        Vars.ui.showInfoToast("Loading save history…", 3f);
         GitHubClient client = new GitHubClient(config);
-        client.metadata(remote -> {
+        client.revisions(revisions -> ui(() -> showRevisionPicker(client, revisions)), this::failAsync);
+    }
+
+    private void showRevisionPicker(GitHubClient client, Seq<GitHubClient.Revision> revisions){
+        finish();
+        if(revisions.isEmpty()){
+            Vars.ui.showErrorMessage("No synchronized save history exists at " + config.path + ". Upload from the device with your current progress first.");
+            return;
+        }
+
+        BaseDialog dialog = new BaseDialog("Choose save version");
+        dialog.cont.add("Choose the GitHub commit to restore. The newest version is listed first.")
+            .width(560f).wrap().pad(8f).row();
+        dialog.cont.pane(table -> {
+            table.defaults().width(560f).height(72f).pad(3f);
+            for(int i = 0; i < revisions.size; i++){
+                GitHubClient.Revision revision = revisions.get(i);
+                String latest = i == 0 ? "[accent]Latest[]  " : "";
+                String label = latest + formatCommitDate(revision.date) + "  [lightgray]" + revision.shortSha() + "[]\n" + firstLine(revision.message);
+                table.button(label, Icon.download, () -> {
+                    dialog.hide();
+                    downloadRevision(client, revision);
+                }).left().marginLeft(12f).row();
+            }
+        }).size(600f, 430f).row();
+        dialog.addCloseButton();
+        dialog.show();
+    }
+
+    private void downloadRevision(GitHubClient client, GitHubClient.Revision revision){
+        if(!start()) return;
+        Vars.ui.showInfoToast("Downloading " + revision.shortSha() + "…", 3f);
+        client.metadata(revision.commitSha, remote -> {
             if(!remote.exists){
-                failAsync("No synchronized save exists at " + config.path + ". Upload from the device with your current progress first.");
+                failAsync("The save file does not exist at commit " + revision.shortSha() + ".");
                 return;
             }
-            client.download(bytes -> ui(() -> confirmImport(bytes, remote.sha)), this::failAsync);
+            client.download(revision.commitSha, bytes -> ui(() -> confirmImport(bytes, remote.sha, revision)), this::failAsync);
         }, this::failAsync);
     }
 
-    private void confirmImport(byte[] bytes, String remoteSha){
+    private void confirmImport(byte[] bytes, String remoteSha, GitHubClient.Revision revision){
         finish();
-        Vars.ui.showConfirm("Replace local game data?", "This will first create a dated local backup, then replace local saves, campaign progress, settings, schematics, maps, and mods with the GitHub copy. Mindustry will close afterward. Continue?", () -> importDownloaded(bytes, remoteSha));
+        String selected = formatCommitDate(revision.date) + " (" + revision.shortSha() + ")";
+        Vars.ui.showConfirm("Replace local game data?", "Restore GitHub save " + selected + "? This will first create a dated local backup, then replace local saves, campaign progress, settings, schematics, maps, and mods. Mindustry will close afterward.", () -> importDownloaded(bytes, remoteSha));
     }
 
     private void importDownloaded(byte[] bytes, String remoteSha){
@@ -170,12 +204,12 @@ public class GitHubSyncMod extends Mod{
             Fi backups = workDirectory.child("backups");
             backups.mkdirs();
             Fi backup = backups.child("before-download-" + backupTime.format(Instant.now()) + ".zip");
-            Vars.ui.settings.exportData(backup);
+            GameDataArchive.exportData(backup);
 
             Fi downloaded = workDirectory.child("download.zip");
             downloaded.writeBytes(bytes, false);
             Arrays.fill(bytes, (byte)0);
-            Vars.ui.settings.importData(downloaded);
+            GameDataArchive.importData(downloaded);
             downloaded.delete();
 
             // The sync config lives outside Mindustry's exported folders, so it survives import.
@@ -226,5 +260,18 @@ public class GitHubSyncMod extends Mod{
     private String formatSize(long bytes){
         if(bytes >= 1024L * 1024L) return String.format("%.1f MiB", bytes / 1024d / 1024d);
         return String.format("%.1f KiB", bytes / 1024d);
+    }
+
+    private String formatCommitDate(String date){
+        if(date == null || date.equals("Unknown date")) return "Unknown date";
+        String clean = date.replace('T', ' ').replace("Z", " UTC");
+        return clean.length() > 20 ? clean.substring(0, 16) + " UTC" : clean;
+    }
+
+    private String firstLine(String message){
+        if(message == null || message.isBlank()) return "Mindustry save sync";
+        int newline = message.indexOf('\n');
+        String line = newline < 0 ? message : message.substring(0, newline);
+        return line.length() > 70 ? line.substring(0, 67) + "…" : line;
     }
 }
