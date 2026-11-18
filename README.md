@@ -5,14 +5,16 @@ A Mindustry v8 Java mod that synchronizes Mindustry's complete game-data export 
 ## Safety behavior
 
 - Uses Mindustry's own full-data export/import implementation.
+- Preserves locally installed mods instead of copying or overwriting their ZIP/JAR files; this avoids Android storage errors and cross-platform mod incompatibilities.
 - Keeps GitHub credentials in `github-save-sync/config.json`, outside the exported archive.
 - Creates a dated local backup before every download/import.
+- Lists up to 30 commits affecting the synchronized save and lets you restore any listed version.
 - Detects remote changes since the device's last sync and asks before overwriting them.
 - Requires explicit confirmation before replacing local data.
 - Exits after import so Mindustry reloads the replaced settings and saves cleanly.
 - Refuses uploads larger than GitHub's 100 MiB Contents API limit.
 
-The full Mindustry export includes settings, saves, campaign sectors, schematics, custom maps, installed mods, and save-related cached assets.
+The synchronized archive includes settings, saves, campaign sectors, schematics, custom maps, and save-related cached assets. Installed mods remain local to each device. Install matching gameplay/content mods on both devices when a save depends on them.
 
 ## Install
 
@@ -35,7 +37,7 @@ Use the repository name only (for example `mindustry-save`), not its full URL. T
 ## Recommended workflow
 
 1. When finished on device A, return to Mindustry's main menu and press **Upload game data**.
-2. On device B, press **Download game data**, confirm the replacement, and reopen Mindustry.
+2. On device B, press **Download game data**, choose the GitHub commit to restore, confirm the replacement, and reopen Mindustry.
 3. Play on device B, return to the main menu, and upload before switching back.
 
 Do not play independently on both devices without uploading/downloading between sessions. This is whole-archive synchronization, not a merge system.
